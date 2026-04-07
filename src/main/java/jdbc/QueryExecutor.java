@@ -4,10 +4,7 @@ import query.NamedParameterQuery;
 import util.Preconditions;
 import util.StringUtils;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.List;
 import java.util.Objects;
 
@@ -52,6 +49,15 @@ public class QueryExecutor {
         }
     }
 
+    public void executeQuery(String sql) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(sql), "sql 은 필수 입니다.");
+        try (final Statement statement = connection.createStatement()) {
+            statement.executeQuery(sql);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * INSERT/UPDATE/DELETE 실행
      */
@@ -77,4 +83,5 @@ public class QueryExecutor {
             return statement.executeUpdate();
         }
     }
+
 }
