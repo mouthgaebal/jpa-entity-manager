@@ -65,11 +65,44 @@ public class ResultSetMapper {
             if (field == null) {
                 continue;
             }
-            final Object value = rs.getObject(i, field.getType());
+            final Object value = getColumnValue(rs, i, field);
             field.setAccessible(true);
             field.set(instance, value);
         }
         return instance;
+    }
+
+    private Object getColumnValue(ResultSet rs, int index, Field field) throws SQLException {
+        final Class<?> type = field.getType();
+        if (type.isPrimitive()) {
+            return getPrimitiveTypeValue(rs, index, type);
+        }
+        return rs.getObject(index, type);
+    }
+
+    private Object getPrimitiveTypeValue(ResultSet rs, int index, Class<?> type) throws SQLException {
+        if (type == boolean.class) {
+            return rs.getBoolean(index);
+        }
+        if (type == byte.class) {
+            return rs.getByte(index);
+        }
+        if (type == short.class) {
+            return rs.getShort(index);
+        }
+        if (type == int.class) {
+            return rs.getInt(index);
+        }
+        if (type == long.class) {
+            return rs.getLong(index);
+        }
+        if (type == float.class) {
+            return rs.getFloat(index);
+        }
+        if (type == double.class) {
+            return rs.getDouble(index);
+        }
+        throw new IllegalArgumentException("지원하지 않는 primitive 타입입니다. type: [%s]".formatted(type.getName()));
     }
 
     private Field getField(ResultSetMetaData metaData, int columnIndex, Map<String, Field> fieldsByColumnName) throws SQLException {
