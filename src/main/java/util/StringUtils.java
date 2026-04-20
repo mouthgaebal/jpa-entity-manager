@@ -36,7 +36,13 @@ public final class StringUtils {
         validateCamelCase(str);
         final char[] chars = str.toCharArray();
         final StringBuilder sb = new StringBuilder();
-        for (final char ch : chars) {
+        for (int i = 0; i < chars.length; i++) {
+            final char ch = chars[i];
+            if (i == 0) {
+                sb.append(Character.toLowerCase(ch));
+                continue;
+            }
+
             if (Character.isUpperCase(ch)) {
                 sb.append('_').append(Character.toLowerCase(ch));
                 continue;
@@ -49,9 +55,6 @@ public final class StringUtils {
     private static void validateCamelCase(String str) {
         Preconditions.checkArgument(isNotBlank(str), "str 은 null 또는 빈 문자열일 수 없습니다.");
         final char[] chars = str.toCharArray();
-        if (Character.isUpperCase(chars[0])) {
-            throw new IllegalArgumentException("camelCase 는 첫 글자가 소문자여야 합니다. str: [%s]".formatted(new String(chars)));
-        }
         for (char ch : chars) {
             if (!Character.isLetterOrDigit(ch)) {
                 throw new IllegalArgumentException("camelCase 는 영문자와 숫자로만 구성되어야 합니다. str: [%s]".formatted(new String(chars)));

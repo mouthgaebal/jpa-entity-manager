@@ -66,12 +66,41 @@ public class QueryExecutor {
     public int execute(String sql, Object... params) {
         Preconditions.checkArgument(StringUtils.isNotBlank(sql), "sql 은 필수 입니다.");
         Objects.requireNonNull(params, "params 는 null 일 수 없습니다.");
-        return executePrepareStatement(sql, pstmt -> {
+        return execute(sql, null, params);
+    }
+
+    public int execute(String sql, GeneratedKey keyHolder, Object... params) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(sql), "sql 은 필수 입니다.");
+        Objects.requireNonNull(params, "params 는 null 일 수 없습니다.");
+
+        final String[] generatedColumnNames = getGeneratedColumnNames(keyHolder);
+        return executePrepareStatement(sql, generatedColumnNames, pstmt -> {
             for (int i = 0; i < params.length; i++) {
                 pstmt.setObject(i + 1, params[i]);
             }
-            return pstmt.executeUpdate();
+            final int update = pstmt.executeUpdate();
+            setKey(pstmt, keyHolder);
+            return update;
         });
+    }
+
+    private String[] getGeneratedColumnNames(GeneratedKey keyHolder) {
+        if (keyHolder == null) {
+            return null;
+        }
+        return new String[] { keyHolder.getKeyColumnName() };
+    }
+
+    private void setKey(PreparedStatement pstmt, GeneratedKey generatedKey) throws SQLException {
+        if (generatedKey == null) {
+            return;
+        }
+        try(final ResultSet resultSet = pstmt.getGeneratedKeys()) {
+            if (resultSet.next()) {
+                final Object key = resultSet.getObject(1);
+                generatedKey.setKey(key);
+            }
+        }
     }
 
     /**
@@ -87,10 +116,13 @@ public class QueryExecutor {
     }
 
     private <T> T executePrepareStatement(String sql, FunctionWithException<PreparedStatement, T> function) {
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+        return executePrepareStatement(sql, null, function);
+    }
+
+
+    private <T> T executePrepareStatement(String sql, String[] generatedColumnNames, FunctionWithException<PreparedStatement, T> function) {
+        try (PreparedStatement pstmt = connection.prepareStatement(sql, generatedColumnNames)) {
             return function.apply(pstmt);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {

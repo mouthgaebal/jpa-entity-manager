@@ -124,17 +124,17 @@ class StringUtilsTest {
                 .hasMessage("str 은 null 또는 빈 문자열일 수 없습니다.");
     }
 
-    @DisplayName("camelCaseToSnakeCase - 입력값이 첫번째 글자가 대문자인 경우 에러")
+    @DisplayName("camelCaseToSnakeCase - 입력값이 첫번째 글자가 대문자인 경우 소문자로 변환")
     @Test
     void camelCaseToSnakeCase1() throws Exception {
         // given
         final String str = "CamelCase";
 
         // when
-        assertThatThrownBy(() -> StringUtils.camelCaseToSnakeCase(str))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("camelCase 는 첫 글자가 소문자여야 합니다. str: [%s]", str);
+        final String result = StringUtils.camelCaseToSnakeCase(str);
 
+        // then
+        assertThat(result).isEqualTo("camel_case");
     }
 
     @ParameterizedTest(name = "camelCaseToSnakeCase - 입력값에 특수문자가 포함된경우 에러. input: [{0}]")

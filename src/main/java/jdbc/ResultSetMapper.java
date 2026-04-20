@@ -1,19 +1,19 @@
 package jdbc;
 
-import util.StringUtils;
+import persistence.EntityMetaData;
+import persistence.EntityMetaDataCache;
+import util.Preconditions;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.sql.JDBCType;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+
+import static java.util.Map.entry;
 
 public class ResultSetMapper {
 
@@ -26,22 +26,16 @@ public class ResultSetMapper {
     public <T> T mapToObject(ResultSet rs, Class<T> targetClass) {
         return wrapException(() -> {
             final ResultSetMetaData metaData = rs.getMetaData();
-            final Map<String, Field> fieldsByColumnName = Arrays.stream(targetClass.getDeclaredFields())
-                    .collect(Collectors.toUnmodifiableMap(this::toLowerCaseColumnName, Function.identity()));
-
-            validateFieldTypes(metaData, fieldsByColumnName);
-            return createInstance(rs, targetClass, metaData, fieldsByColumnName);
+            final EntityMetaData entityMetaData = EntityMetaDataCache.get(targetClass);
+            validateFieldTypes(metaData, entityMetaData);
+            return createInstance(rs, targetClass, metaData, entityMetaData);
         });
     }
 
-    private String toLowerCaseColumnName(Field field) {
-        return StringUtils.camelCaseToSnakeCase(field.getName());
-    }
-
-    private void validateFieldTypes(ResultSetMetaData metaData, Map<String, Field> fieldsByColumnName) throws SQLException {
+    private void validateFieldTypes(ResultSetMetaData metaData, EntityMetaData entityMetaData) throws Exception {
         final int columnCount = metaData.getColumnCount();
         for (int i = 1; i <= columnCount; i++) {
-            final Field field = getField(metaData, i, fieldsByColumnName);
+            final Field field = getField(metaData, i, entityMetaData);
             if (field == null) {
                 continue;
             }
@@ -55,13 +49,13 @@ public class ResultSetMapper {
     private <T> T createInstance(ResultSet rs,
                                  Class<T> targetClass,
                                  ResultSetMetaData metaData,
-                                 Map<String, Field> fieldsByColumnName) throws Exception {
+                                 EntityMetaData entityMetaData) throws Exception {
 
         final Constructor<T> constructor = targetClass.getDeclaredConstructor();
         final T instance = constructor.newInstance();
         final int columnCount = metaData.getColumnCount();
         for (int i = 1; i <= columnCount; i++) {
-            final Field field = getField(metaData, i, fieldsByColumnName);
+            final Field field = getField(metaData, i, entityMetaData);
             if (field == null) {
                 continue;
             }
@@ -72,7 +66,13 @@ public class ResultSetMapper {
         return instance;
     }
 
-    private Object getColumnValue(ResultSet rs, int index, Field field) throws SQLException {
+    private Field getField(ResultSetMetaData metaData, int columnIndex, EntityMetaData entityMetaData) throws Exception {
+        final String columnName = metaData.getColumnName(columnIndex).toLowerCase();
+        return entityMetaData.getField(columnName)
+                .orElse(null);
+    }
+
+    private Object getColumnValue(ResultSet rs, int index, Field field) throws Exception {
         final Class<?> type = field.getType();
         if (type.isPrimitive()) {
             return getPrimitiveTypeValue(rs, index, type);
@@ -80,34 +80,8 @@ public class ResultSetMapper {
         return rs.getObject(index, type);
     }
 
-    private Object getPrimitiveTypeValue(ResultSet rs, int index, Class<?> type) throws SQLException {
-        if (type == boolean.class) {
-            return rs.getBoolean(index);
-        }
-        if (type == byte.class) {
-            return rs.getByte(index);
-        }
-        if (type == short.class) {
-            return rs.getShort(index);
-        }
-        if (type == int.class) {
-            return rs.getInt(index);
-        }
-        if (type == long.class) {
-            return rs.getLong(index);
-        }
-        if (type == float.class) {
-            return rs.getFloat(index);
-        }
-        if (type == double.class) {
-            return rs.getDouble(index);
-        }
-        throw new IllegalArgumentException("지원하지 않는 primitive 타입입니다. type: [%s]".formatted(type.getName()));
-    }
-
-    private Field getField(ResultSetMetaData metaData, int columnIndex, Map<String, Field> fieldsByColumnName) throws SQLException {
-        final String columnName = metaData.getColumnName(columnIndex).toLowerCase();
-        return fieldsByColumnName.get(columnName);
+    private Object getPrimitiveTypeValue(ResultSet rs, int index, Class<?> type) throws Exception {
+        return PrimitiveTypeMapper.mapPrimitiveType(rs, index, type);
     }
 
     private void validateType(JDBCType jdbcType, Class<?> type) {
@@ -144,6 +118,29 @@ public class ResultSetMapper {
 
     private interface ExceptionSupplier<T> {
         T get() throws Exception;
+    }
+
+    static class PrimitiveTypeMapper {
+
+        private static final Map<Class<?>, BiFunctionWithException<ResultSet, Integer, Object>> PRIMITIVE_TYPE_MAPPERS = Map.ofEntries(
+                entry(boolean.class, ResultSet::getBoolean),
+                entry(byte.class, ResultSet::getByte),
+                entry(short.class, ResultSet::getShort),
+                entry(int.class, ResultSet::getInt),
+                entry(long.class, ResultSet::getLong),
+                entry(float.class, ResultSet::getFloat),
+                entry(double.class, ResultSet::getDouble)
+        );
+
+        public static Object mapPrimitiveType(ResultSet rs, int index, Class<?> type) throws Exception {
+            Preconditions.checkArgument(type.isPrimitive(), "type 은 primitive 타입이어야 합니다. type: [%s]".formatted(type.getName()));
+            final BiFunctionWithException<ResultSet, Integer, Object> mapper = PRIMITIVE_TYPE_MAPPERS.get(type);
+            if (mapper == null) {
+                throw new IllegalArgumentException("지원하지 않는 primitive 타입입니다. type: [%s]".formatted(type.getName()));
+            }
+            return mapper.apply(rs, index);
+        }
+
     }
 
 }
